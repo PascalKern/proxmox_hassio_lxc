@@ -139,12 +139,12 @@ export LXC_BASE=/var/lib/lxc
 export CT_BASE="${LXC_BASE}/${CTID}"
 export LXC_ROOTFS_MOUNT="${CT_BASE}/rootfs/"
 
-
-msg "Patch container config to enable nesting..."
-sed -i 's/^#lxc.include/lxc.include/' "${CT_BASE}/config"
+##### Temp DISABLED
+#msg "Patch container config to enable nesting..."
+#sed -i 's/^#lxc.include/lxc.include/' "${CT_BASE}/config"
 
 # Set autodev hook to enable access to devices in container
-##### Temp Disabled
+##### Temp DISABLED
 #msg "Setting up the autodev hook script..."
 #bash ./set_autodev_hook.sh $CTID
 
