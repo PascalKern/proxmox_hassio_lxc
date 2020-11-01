@@ -64,12 +64,12 @@ HOOK_SCRIPT=${HOOK_SCRIPT//$'\n'/} #Remove newline char from variable
 
 # Remove autodev settings
 CTID=$1
-CTID_CONFIG_PATH=/etc/pve/lxc/${CTID}.conf
+CTID_CONFIG_PATH=${LXC_BASE}/${CTID}/config
 sed '/autodev/d' $CTID_CONFIG_PATH >CTID.conf
 cat CTID.conf >$CTID_CONFIG_PATH
 
 # Add autodev settings
 cat <<EOF >> $CTID_CONFIG_PATH
-lxc.autodev: 1
-lxc.hook.autodev: bash -c '$HOOK_SCRIPT'
+lxc.autodev = 1
+lxc.hook.autodev = bash -c '$HOOK_SCRIPT'
 EOF

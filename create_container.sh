@@ -8,7 +8,7 @@ set -o pipefail #Pipe will exit with last non-zero status if applicable
 shopt -s expand_aliases
 alias die='EXIT=$? LINE=$LINENO error_exit'
 trap die ERR
-trap cleanup EXIT
+# trap cleanup EXIT
 
 function error_exit() {
   trap - ERR
@@ -16,6 +16,9 @@ function error_exit() {
   local REASON="\e[97m${1:-$DEFAULT}\e[39m"
   local FLAG="\e[91m[ERROR] \e[93m$EXIT@$LINE"
   msg "$FLAG $REASON"
+  info "Environment was:"
+  env
+  info "Going to clean up and exit with $EXIT"
   [ ! -z ${CTID-} ] && cleanup_ctid
   exit $EXIT
 }
@@ -33,139 +36,230 @@ function msg() {
   local TEXT="$1"
   echo -e "$TEXT"
 }
-function cleanup_ctid() {
-  if $(pct status $CTID &>/dev/null); then
-    if [ "$(pct status $CTID | awk '{print $2}')" == "running" ]; then
-      pct stop $CTID
-    fi
-    pct destroy $CTID
-  elif [ "$(pvesm list $STORAGE --vmid $CTID)" != "" ]; then
-    pvesm free $ROOTFS
-  fi
-}
+ function cleanup_ctid() {
+   if $(lxc-info $CTID &>/dev/null); then
+     if [ "$(lxc-info $CTID | awk '{print $2}')" == "running" ]; then
+       lxc-stop $CTID
+     fi
+     lxc-destroy $CTID
+#   elif [ "$(pvesm list $STORAGE --vmid $CTID)" != "" ]; then
+#     pvesm free $ROOTFS
+   fi
+ }
 function cleanup() {
   popd >/dev/null
   rm -rf $TEMP_DIR
 }
 TEMP_DIR=$(mktemp -d)
+cp *.sh $TEMP_DIR
+
 pushd $TEMP_DIR >/dev/null
 
-# Download setup script
-REPO="https://github.com/whiskerz007/proxmox_hassio_lxc"
-wget -qO - ${REPO}/tarball/master | tar -xz --strip-components=1
+info "Workingdirectory is: $(pwd)"
+info "Content: 
+$(ls -l)"
 
-# Select storage location
-while read -r line; do
-  TAG=$(echo $line | awk '{print $1}')
-  TYPE=$(echo $line | awk '{printf "%-10s", $2}')
-  FREE=$(echo $line | numfmt --field 4-6 --from-unit=K --to=iec --format %.2f | awk '{printf( "%9sB", $6)}')
-  ITEM="  Type: $TYPE Free: $FREE "
-  OFFSET=2
-  if [[ $((${#ITEM} + $OFFSET)) -gt ${MSG_MAX_LENGTH:-} ]]; then
-    MSG_MAX_LENGTH=$((${#ITEM} + $OFFSET))
-  fi
-  STORAGE_MENU+=( "$TAG" "$ITEM" "OFF" )
-done < <(pvesm status -content rootdir | awk 'NR>1')
-if [ $((${#STORAGE_MENU[@]}/3)) -eq 0 ]; then
-  warn "'Container' needs to be selected for at least one storage location."
-  die "Unable to detect valid storage location."
-elif [ $((${#STORAGE_MENU[@]}/3)) -eq 1 ]; then
-  STORAGE=${STORAGE_MENU[0]}
-else
-  while [ -z "${STORAGE:+x}" ]; do
-    STORAGE=$(whiptail --title "Storage Pools" --radiolist \
-    "Which storage pool you would like to use for the container?\n\n" \
-    16 $(($MSG_MAX_LENGTH + 23)) 6 \
-    "${STORAGE_MENU[@]}" 3>&1 1>&2 2>&3) || exit
-  done
-fi
-info "Using '$STORAGE' for storage location."
+# Download setup script
+## REPO="https://github.com/whiskerz007/proxmox_hassio_lxc"
+## wget -qO - ${REPO}/tarball/master | tar -xz --strip-components=1
+
+# # Select storage location
+# while read -r line; do
+#   TAG=$(echo $line | awk '{print $1}')
+#   TYPE=$(echo $line | awk '{printf "%-10s", $2}')
+#   FREE=$(echo $line | numfmt --field 4-6 --from-unit=K --to=iec --format %.2f | awk '{printf( "%9sB", $6)}')
+#   ITEM="  Type: $TYPE Free: $FREE "
+#   OFFSET=2
+#   if [[ $((${#ITEM} + $OFFSET)) -gt ${MSG_MAX_LENGTH:-} ]]; then
+#     MSG_MAX_LENGTH=$((${#ITEM} + $OFFSET))
+#   fi
+#   STORAGE_MENU+=( "$TAG" "$ITEM" "OFF" )
+# done < <(pvesm status -content rootdir | awk 'NR>1')
+# 
+# if [ $((${#STORAGE_MENU[@]}/3)) -eq 0 ]; then
+#   warn "'Container' needs to be selected for at least one storage location."
+#   die "Unable to detect valid storage location."
+# elif [ $((${#STORAGE_MENU[@]}/3)) -eq 1 ]; then
+#   STORAGE=${STORAGE_MENU[0]}
+# else
+#   while [ -z "${STORAGE:+x}" ]; do
+#     STORAGE=$(whiptail --title "Storage Pools" --radiolist \
+#     "Which storage pool you would like to use for the container?\n\n" \
+#     16 $(($MSG_MAX_LENGTH + 23)) 6 \
+#     "${STORAGE_MENU[@]}" 3>&1 1>&2 2>&3) || exit
+#   done
+# fi
+# info "Using '$STORAGE' for storage location."
 
 # Get the next guest VM/LXC ID
-CTID=$(pvesh get /cluster/nextid)
-info "Container ID is $CTID."
+# CTID=$(pvesh get /cluster/nextid)
+CTID=${1:-Testing}
+info "Container ID is: '$CTID'"
 
-# Download latest Debian LXC template
-msg "Updating LXC template list..."
-pveam update >/dev/null
-msg "Downloading LXC template..."
+# # Download latest Debian LXC template
+# msg "Updating LXC template list..."
+# pveam update >/dev/null
+# msg "Downloading LXC template..."
+# OSTYPE=debian
+# OSVERSION=${OSTYPE}-10
+# mapfile -t TEMPLATES < <(pveam available -section system | sed -n "s/.*\($OSVERSION.*\)/\1/p" | sort -t - -k 2 -V)
+# TEMPLATE="${TEMPLATES[-1]}"
+# pveam download local $TEMPLATE >/dev/null ||
+#   die "A problem occured while downloading the LXC template."
+
 OSTYPE=debian
-OSVERSION=${OSTYPE}-10
-mapfile -t TEMPLATES < <(pveam available -section system | sed -n "s/.*\($OSVERSION.*\)/\1/p" | sort -t - -k 2 -V)
-TEMPLATE="${TEMPLATES[-1]}"
-pveam download local $TEMPLATE >/dev/null ||
-  die "A problem occured while downloading the LXC template."
+OSVERSION=buster
 
-# Create variables for container disk
-STORAGE_TYPE=$(pvesm status -storage $STORAGE | awk 'NR>1 {print $2}')
-case $STORAGE_TYPE in
-  dir|nfs)
-    DISK_EXT=".raw"
-    DISK_REF="$CTID/"
-    ;;
-  zfspool)
-    DISK_PREFIX="subvol"
-    DISK_FORMAT="subvol"
-    ;;
-esac
-DISK=${DISK_PREFIX:-vm}-${CTID}-disk-0${DISK_EXT-}
-ROOTFS=${STORAGE}:${DISK_REF-}${DISK}
+msg "Setup target container config..."
+bash ./setup_lxc_config.sh $CTID
 
-# Create LXC
-msg "Creating LXC container..."
-DISK_SIZE=4G
-pvesm alloc $STORAGE $CTID $DISK $DISK_SIZE --format ${DISK_FORMAT:-raw} >/dev/null
-if [ "$STORAGE_TYPE" == "zfspool" ]; then
-  warn "Some addons may not work due to ZFS not supporting 'fallocate'."
-else
-  mkfs.ext4 $(pvesm path $ROOTFS) &>/dev/null
-fi
-ARCH=$(dpkg --print-architecture)
-HOSTNAME=homeassistant
-TEMPLATE_STRING="local:vztmpl/${TEMPLATE}"
-PCT_OPTIONS=(
-  -arch $ARCH
-  -cmode shell
-  -features nesting=1
-  -hostname $HOSTNAME
-  -net0 name=eth0,bridge=vmbr0
-  -onboot 1
-  -ostype $OSTYPE
-  -rootfs $ROOTFS,size=$DISK_SIZE
-  -storage $STORAGE
-  -tags homeassistant
+# # Create variables for container disk
+# STORAGE_TYPE=$(pvesm status -storage $STORAGE | awk 'NR>1 {print $2}')
+# case $STORAGE_TYPE in
+#   dir|nfs)
+#     DISK_EXT=".raw"
+#     DISK_REF="$CTID/"
+#     ;;
+#   zfspool)
+#     DISK_PREFIX="subvol"
+#     DISK_FORMAT="subvol"
+#     ;;
+# esac
+# DISK=${DISK_PREFIX:-vm}-${CTID}-disk-0${DISK_EXT-}
+# ROOTFS=${STORAGE}:${DISK_REF-}${DISK}
+
+# # Create LXC
+# msg "Creating LXC container..."
+# DISK_SIZE=4G
+# pvesm alloc $STORAGE $CTID $DISK $DISK_SIZE --format ${DISK_FORMAT:-raw} >/dev/null
+# if [ "$STORAGE_TYPE" == "zfspool" ]; then
+#   warn "Some addons may not work due to ZFS not supporting 'fallocate'."
+# else
+#   mkfs.ext4 $(pvesm path $ROOTFS) &>/dev/null
+# fi
+# ARCH=$(dpkg --print-architecture)
+# HOSTNAME=homeassistant
+# TEMPLATE_STRING="local:vztmpl/${TEMPLATE}"
+# PCT_OPTIONS=(
+#   -arch $ARCH
+#   -cmode shell
+#   -features nesting=1
+#   -hostname $HOSTNAME
+#   -net0 name=eth0,bridge=vmbr0
+#   -onboot 1
+#   -ostype $OSTYPE
+#   -rootfs $ROOTFS,size=$DISK_SIZE
+#   -storage $STORAGE
+#   -tags homeassistant
+# )
+# pct create $CTID $TEMPLATE_STRING ${PCT_OPTIONS[@]} >/dev/null
+
+## download template options (/usr/share/lxc/templates/lxc-download)
+## -> lxc-container -t download -h
+##
+##LXC container image downloader
+##
+##Special arguments:
+##[ -h | --help ]: Print this help message and exit
+##[ -l | --list ]: List all available images and exit
+##
+##Required arguments:
+##[ -d | --dist <distribution> ]: The name of the distribution
+##[ -r | --release <release> ]: Release name/version
+##[ -a | --arch <architecture> ]: Architecture of the container
+##
+##Optional arguments:
+##[ --variant <variant> ]: Variant of the image (default: "default")
+##[ --server <server> ]: Image server (default: "images.linuxcontainers.org")
+##[ --keyid <keyid> ]: GPG keyid (default: 0x...)
+##[ --keyserver <keyserver> ]: GPG keyserver to use. Environment variable: DOWNLOAD_KEYSERVER
+##[ --no-validate ]: Disable GPG validation (not recommended)
+##[ --flush-cache ]: Flush the local copy (if present)
+##[ --force-cache ]: Force the use of the local copy even if expired
+##
+##LXC internal arguments (do not pass manually!):
+##[ --name <name> ]: The container name
+##[ --path <path> ]: The path to the container
+##[ --rootfs <rootfs> ]: The path to the container's rootfs
+##[ --mapped-uid <map> ]: A uid map (user namespaces)
+##[ --mapped-gid <map> ]: A gid map (user namespaces)
+##
+##Environment Variables:
+##DOWNLOAD_KEYSERVER : The URL of the key server to use, instead of the default.
+##                     Can be further overridden by using optional argument --keyserver
+
+CONFIG="$(pwd)/${CTID}.lxc.config"
+# ARCH=x86_64
+# ARCH="$(arch)"
+ARCH=amd64
+# ARCH=arm64
+
+LXC_OPTIONS=(
+	-n $CTID 
+	-t download 
+	-B best 
+	-f $CONFIG 
+	--  
+	--dist=$OSTYPE
+	--arch=$ARCH
+	--release=$OSVERSION
 )
-pct create $CTID $TEMPLATE_STRING ${PCT_OPTIONS[@]} >/dev/null
 
-# Modify LXC permissions to support Docker
-LXC_CONFIG=/etc/pve/lxc/${CTID}.conf
-cat <<EOF >> $LXC_CONFIG
-lxc.cgroup.devices.allow: a
-lxc.cap.drop:
-EOF
+if [[ ! -f ${CONFIG} ]]; then
+	echo "Missing LXC config: '$CONFIG'"
+	EXIT=1 LINE=$LINENO error_exit 
+	exit 1
+fi
 
-# Load modules for Docker before starting LXC
-cat << 'EOF' >> $LXC_CONFIG
-lxc.hook.pre-start: sh -ec 'for module in aufs overlay; do modinfo $module; $(lsmod | grep -Fq $module) || modprobe $module; done;'
-EOF
+
+msg "Create container..."
+echo -n "CMD: 'lxc-create ${LXC_OPTIONS[@]}'"
+lxc-create ${LXC_OPTIONS[@]} 
+
+
+export LXC_BASE=/var/lib/lxc
+export CT_BASE=${LXC_BASE}/${CTID}
+export LXC_ROOTFS_MOUNT=${CT_BASE}/rootfs/
+
+
+msg "Patch container config to enable nesting..."
+sed -i 's/^#lxc.include/lxc.include/' "${CT_BASE}/config"
+
 
 # Set autodev hook to enable access to devices in container
+msg "Setting up the autodev hook script..."
 bash ./set_autodev_hook.sh $CTID
 
-# Set container timezone to match host
-cat << 'EOF' >> $LXC_CONFIG
-lxc.hook.mount: sh -c 'ln -fs $(readlink /etc/localtime) ${LXC_ROOTFS_MOUNT}/etc/localtime'
-EOF
+
+# # Modify LXC permissions to support Docker
+# LXC_CONFIG=/etc/pve/lxc/${CTID}.conf
+# cat <<EOF >> $LXC_CONFIG
+# lxc.cgroup.devices.allow: a
+# lxc.cap.drop:
+# EOF
+
+# # Load modules for Docker before starting LXC
+# cat << 'EOF' >> $LXC_CONFIG
+# lxc.hook.pre-start: sh -ec 'for module in aufs overlay; do modinfo $module; $(lsmod | grep -Fq $module) || modprobe $module; done;'
+# EOF
+
+
+# # Set container timezone to match host
+# cat << 'EOF' >> $LXC_CONFIG
+# lxc.hook.mount: sh -c 'ln -fs $(readlink /etc/localtime) ${LXC_ROOTFS_MOUNT}/etc/localtime'
+# EOF
 
 # Setup container for Home Assistant
 msg "Starting LXC container..."
-pct start $CTID
+#pct start $CTID
+lxc-start -n ${CTID} --logpriority=debug --logfile=${LXC_BASE}/${CTID}/${CTID}.log
 
 ### Begin LXC commands ###
 alias lxc-cmd="lxc-attach -n $CTID --"
 # Prepare container OS
 msg "Setting up container OS..."
 lxc-cmd dhclient -4
+lxc-cmd sed -i "s/\(^en_US.UTF-8\)/# \1/" /etc/locale.gen
 lxc-cmd sed -i "/$LANG/ s/\(^# \)//" /etc/locale.gen
 lxc-cmd locale-gen >/dev/null
 lxc-cmd apt-get -y purge openssh-{client,server} >/dev/null
@@ -175,10 +269,16 @@ msg "Updating container OS..."
 lxc-cmd apt-get update >/dev/null
 lxc-cmd apt-get -qqy upgrade &>/dev/null
 
+
 # Install prerequisites
 msg "Installing prerequisites..."
 lxc-cmd apt-get -qqy install \
-    avahi-daemon curl jq network-manager xterm &>/dev/null
+    wget kmod avahi-daemon curl jq network-manager xterm &>/dev/null
+
+
+echo "*********************** Early exit ***********************"
+exit 0
+
 
 # Install Docker
 msg "Installing Docker..."
