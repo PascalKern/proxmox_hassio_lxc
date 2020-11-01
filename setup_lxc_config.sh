@@ -31,6 +31,8 @@ function cleanup() {
 parrent_path=$(pwd)
 
 NAME=${1:-"Testing"}
+LXC_BASE_DIR="/var/lib/lxc"
+
 LXC_CONFIG=${NAME}.lxc.config
 
 if [[ -f $LXC_CONFIG ]]; then
@@ -41,8 +43,10 @@ TEMP_DIR=$(mktemp -d)
 pushd $TEMP_DIR >/dev/null
 
 
-
 cat > $LXC_CONFIG <<-"EOF"
+	# The lxc_rootfs_mount is injected when lxc.hook.mount OR lxc.hook.autodev is run!
+	# lxc.environment = LXC_ROOTFS_MOUNT=<LXC_BASE_DIR>/<NAME>/rootfs
+
 	##Issue with apt-get! Must not add this? Think NOT
 	#lxc.arch = x86_64
 	## Or need to copy the /usr/bin/qemu-x86_64 to container (/usr/bin) first? NO
@@ -55,17 +59,19 @@ cat > $LXC_CONFIG <<-"EOF"
 
 	## Bellow activated does "KILL" apt-get ie. errors with Permissions etc.
 	## https://github.com/whiskerz007/proxmox_hassio_lxc/blob/fad821e2c3d2d0fb570f844379f03b247ff3b9c7/create_container.sh#L141
-	# lxc.cgroup.devices.allow = a
-	lxc.cap.drop = 
+	#lxc.cgroup.devices.allow = a
+	#lxc.cap.drop = 
 
 	## https://github.com/whiskerz007/proxmox_hassio_lxc/blob/fad821e2c3d2d0fb570f844379f03b247ff3b9c7/create_container.sh#L148
 	# lxc.hook.pre-start = "sh -ec 'for module in aufs overlay; do modinfo $module; $(lsmod | grep -Fq $module) || modprobe $module; done;'"
 
 	## https://github.com/whiskerz007/proxmox_hassio_lxc/blob/fad821e2c3d2d0fb570f844379f03b247ff3b9c7/create_container.sh#L156
-	lxc.hook.mount = "sh -c 'ln -fs $(readlink /etc/localtime) /var/lib/lxc/<NAME>/rootfs/etc/localtime'"
+	lxc.hook.mount = "sh -c 'ln -fs $(readlink /etc/localtime) LXC_ROOTFS/etc/localtime'"
 EOF
 
-sed -i "s/<NAME>/$NAME/" ${LXC_CONFIG}
+# The lxc_rootfs_mount is injected when lxc.hook.mount OR lxc.hook.autodev is run!
+# sed -i "s/<NAME>/$NAME/g" ${LXC_CONFIG}
+# sed -i "s|<LXC_BASE_DIR>|$LXC_BASE_DIR|g" ${LXC_CONFIG}
 
 cp ${LXC_CONFIG} ${parrent_path}
 

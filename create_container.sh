@@ -16,7 +16,7 @@ function error_exit() {
   local REASON="\e[97m${1:-$DEFAULT}\e[39m"
   local FLAG="\e[91m[ERROR] \e[93m$EXIT@$LINE"
   msg "$FLAG $REASON"
-  info "Environment was:"
+#  info "Environment was:"
   env
   info "Going to clean up and exit with $EXIT"
   [ ! -z ${CTID-} ] && cleanup_ctid
@@ -93,19 +93,9 @@ $(ls -l)"
 
 # Get the next guest VM/LXC ID
 # CTID=$(pvesh get /cluster/nextid)
+
 CTID=${1:-Testing}
 info "Container ID is: '$CTID'"
-
-# # Download latest Debian LXC template
-# msg "Updating LXC template list..."
-# pveam update >/dev/null
-# msg "Downloading LXC template..."
-# OSTYPE=debian
-# OSVERSION=${OSTYPE}-10
-# mapfile -t TEMPLATES < <(pveam available -section system | sed -n "s/.*\($OSVERSION.*\)/\1/p" | sort -t - -k 2 -V)
-# TEMPLATE="${TEMPLATES[-1]}"
-# pveam download local $TEMPLATE >/dev/null ||
-#   die "A problem occured while downloading the LXC template."
 
 OSTYPE=debian
 OSVERSION=buster
@@ -113,80 +103,6 @@ OSVERSION=buster
 msg "Setup target container config..."
 bash ./setup_lxc_config.sh $CTID
 
-# # Create variables for container disk
-# STORAGE_TYPE=$(pvesm status -storage $STORAGE | awk 'NR>1 {print $2}')
-# case $STORAGE_TYPE in
-#   dir|nfs)
-#     DISK_EXT=".raw"
-#     DISK_REF="$CTID/"
-#     ;;
-#   zfspool)
-#     DISK_PREFIX="subvol"
-#     DISK_FORMAT="subvol"
-#     ;;
-# esac
-# DISK=${DISK_PREFIX:-vm}-${CTID}-disk-0${DISK_EXT-}
-# ROOTFS=${STORAGE}:${DISK_REF-}${DISK}
-
-# # Create LXC
-# msg "Creating LXC container..."
-# DISK_SIZE=4G
-# pvesm alloc $STORAGE $CTID $DISK $DISK_SIZE --format ${DISK_FORMAT:-raw} >/dev/null
-# if [ "$STORAGE_TYPE" == "zfspool" ]; then
-#   warn "Some addons may not work due to ZFS not supporting 'fallocate'."
-# else
-#   mkfs.ext4 $(pvesm path $ROOTFS) &>/dev/null
-# fi
-# ARCH=$(dpkg --print-architecture)
-# HOSTNAME=homeassistant
-# TEMPLATE_STRING="local:vztmpl/${TEMPLATE}"
-# PCT_OPTIONS=(
-#   -arch $ARCH
-#   -cmode shell
-#   -features nesting=1
-#   -hostname $HOSTNAME
-#   -net0 name=eth0,bridge=vmbr0
-#   -onboot 1
-#   -ostype $OSTYPE
-#   -rootfs $ROOTFS,size=$DISK_SIZE
-#   -storage $STORAGE
-#   -tags homeassistant
-# )
-# pct create $CTID $TEMPLATE_STRING ${PCT_OPTIONS[@]} >/dev/null
-
-## download template options (/usr/share/lxc/templates/lxc-download)
-## -> lxc-container -t download -h
-##
-##LXC container image downloader
-##
-##Special arguments:
-##[ -h | --help ]: Print this help message and exit
-##[ -l | --list ]: List all available images and exit
-##
-##Required arguments:
-##[ -d | --dist <distribution> ]: The name of the distribution
-##[ -r | --release <release> ]: Release name/version
-##[ -a | --arch <architecture> ]: Architecture of the container
-##
-##Optional arguments:
-##[ --variant <variant> ]: Variant of the image (default: "default")
-##[ --server <server> ]: Image server (default: "images.linuxcontainers.org")
-##[ --keyid <keyid> ]: GPG keyid (default: 0x...)
-##[ --keyserver <keyserver> ]: GPG keyserver to use. Environment variable: DOWNLOAD_KEYSERVER
-##[ --no-validate ]: Disable GPG validation (not recommended)
-##[ --flush-cache ]: Flush the local copy (if present)
-##[ --force-cache ]: Force the use of the local copy even if expired
-##
-##LXC internal arguments (do not pass manually!):
-##[ --name <name> ]: The container name
-##[ --path <path> ]: The path to the container
-##[ --rootfs <rootfs> ]: The path to the container's rootfs
-##[ --mapped-uid <map> ]: A uid map (user namespaces)
-##[ --mapped-gid <map> ]: A gid map (user namespaces)
-##
-##Environment Variables:
-##DOWNLOAD_KEYSERVER : The URL of the key server to use, instead of the default.
-##                     Can be further overridden by using optional argument --keyserver
 
 CONFIG="$(pwd)/${CTID}.lxc.config"
 # ARCH=x86_64
@@ -213,30 +129,30 @@ fi
 
 
 msg "Create container..."
-echo -n "CMD: 'lxc-create ${LXC_OPTIONS[@]}'"
+echo "CMD.  : 'lxc-create ${LXC_OPTIONS[@]}'"
+echo "CONFIG: "
+cat "${CONFIG}"
 lxc-create ${LXC_OPTIONS[@]} 
 
 
 export LXC_BASE=/var/lib/lxc
-export CT_BASE=${LXC_BASE}/${CTID}
-export LXC_ROOTFS_MOUNT=${CT_BASE}/rootfs/
+export CT_BASE="${LXC_BASE}/${CTID}"
+export LXC_ROOTFS_MOUNT="${CT_BASE}/rootfs/"
 
 
 msg "Patch container config to enable nesting..."
 sed -i 's/^#lxc.include/lxc.include/' "${CT_BASE}/config"
 
-
 # Set autodev hook to enable access to devices in container
-msg "Setting up the autodev hook script..."
-bash ./set_autodev_hook.sh $CTID
+##### Temp Disabled
+#msg "Setting up the autodev hook script..."
+#bash ./set_autodev_hook.sh $CTID
 
 
-# # Modify LXC permissions to support Docker
-# LXC_CONFIG=/etc/pve/lxc/${CTID}.conf
-# cat <<EOF >> $LXC_CONFIG
-# lxc.cgroup.devices.allow: a
-# lxc.cap.drop:
-# EOF
+info "Updated config content:"
+cat ${CT_BASE}/config || EXIT=1 LINE=$LINENO error_exit
+
+
 
 # # Load modules for Docker before starting LXC
 # cat << 'EOF' >> $LXC_CONFIG

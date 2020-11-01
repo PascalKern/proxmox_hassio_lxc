@@ -49,7 +49,8 @@ for char_dev in ${CHAR_DEVS[@]}; do
 done
 
 # Store autodev hook script in variable
-read -r -d '' HOOK_SCRIPT <<- EOF || true
+read -r -d '' HOOK_SCRIPT <<- "EOF" || true
+echo "Run AutoDev Hook Script with rootfs_mount as: ${LXC_ROOTFS_MOUNT}"
 for char_dev in \$(find /sys/dev/char -regextype sed $CHAR_DEV_STRING); do
   dev="/dev/\$(sed -n "/DEVNAME/ s/^.*=\(.*\)$/\1/p" \${char_dev}/uevent)";
   mkdir -p \$(dirname \${LXC_ROOTFS_MOUNT}\${dev});
@@ -63,7 +64,7 @@ EOF
 HOOK_SCRIPT=${HOOK_SCRIPT//$'\n'/} #Remove newline char from variable
 
 # Remove autodev settings
-CTID=$1
+CTID=${1:-"Testing"}
 CTID_CONFIG_PATH=${LXC_BASE}/${CTID}/config
 sed '/autodev/d' $CTID_CONFIG_PATH >CTID.conf
 cat CTID.conf >$CTID_CONFIG_PATH
@@ -72,4 +73,5 @@ cat CTID.conf >$CTID_CONFIG_PATH
 cat <<EOF >> $CTID_CONFIG_PATH
 lxc.autodev = 1
 lxc.hook.autodev = bash -c '$HOOK_SCRIPT'
+
 EOF
