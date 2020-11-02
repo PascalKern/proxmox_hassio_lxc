@@ -17,7 +17,7 @@ function error_exit() {
   local FLAG="\e[91m[ERROR] \e[93m$EXIT@$LINE"
   msg "$FLAG $REASON"
 #  info "Environment was:"
-  env
+#  env
   info "Going to clean up and exit with $EXIT"
   [ ! -z ${CTID-} ] && cleanup_ctid
   exit $EXIT
@@ -45,61 +45,27 @@ function debug() {
 }
 function cleanup_ctid() {
    if $(lxc-info $CTID &>/dev/null); then
-     if [ "$(lxc-info $CTID | awk '{print $2}')" == "running" ]; then
+     if [ "$(lxc-info -s $CTID | awk '{print $2}')" == "RUNNING" ]; then
        lxc-stop $CTID
      fi
      lxc-destroy $CTID
 #   elif [ "$(pvesm list $STORAGE --vmid $CTID)" != "" ]; then
 #     pvesm free $ROOTFS
    fi
- }
+}
 function cleanup() {
   popd >/dev/null
   rm -rf $TEMP_DIR
 }
 TEMP_DIR=$(mktemp -d)
 cp *.sh $TEMP_DIR
+cp hassio-fix-btime.service $TEMP_DIR
 
 pushd $TEMP_DIR >/dev/null
 
 info "Workingdirectory is: $(pwd)"
 info "Content: 
 $(ls -l)"
-
-# Download setup script
-## REPO="https://github.com/whiskerz007/proxmox_hassio_lxc"
-## wget -qO - ${REPO}/tarball/master | tar -xz --strip-components=1
-
-# # Select storage location
-# while read -r line; do
-#   TAG=$(echo $line | awk '{print $1}')
-#   TYPE=$(echo $line | awk '{printf "%-10s", $2}')
-#   FREE=$(echo $line | numfmt --field 4-6 --from-unit=K --to=iec --format %.2f | awk '{printf( "%9sB", $6)}')
-#   ITEM="  Type: $TYPE Free: $FREE "
-#   OFFSET=2
-#   if [[ $((${#ITEM} + $OFFSET)) -gt ${MSG_MAX_LENGTH:-} ]]; then
-#     MSG_MAX_LENGTH=$((${#ITEM} + $OFFSET))
-#   fi
-#   STORAGE_MENU+=( "$TAG" "$ITEM" "OFF" )
-# done < <(pvesm status -content rootdir | awk 'NR>1')
-# 
-# if [ $((${#STORAGE_MENU[@]}/3)) -eq 0 ]; then
-#   warn "'Container' needs to be selected for at least one storage location."
-#   die "Unable to detect valid storage location."
-# elif [ $((${#STORAGE_MENU[@]}/3)) -eq 1 ]; then
-#   STORAGE=${STORAGE_MENU[0]}
-# else
-#   while [ -z "${STORAGE:+x}" ]; do
-#     STORAGE=$(whiptail --title "Storage Pools" --radiolist \
-#     "Which storage pool you would like to use for the container?\n\n" \
-#     16 $(($MSG_MAX_LENGTH + 23)) 6 \
-#     "${STORAGE_MENU[@]}" 3>&1 1>&2 2>&3) || exit
-#   done
-# fi
-# info "Using '$STORAGE' for storage location."
-
-# Get the next guest VM/LXC ID
-# CTID=$(pvesh get /cluster/nextid)
 
 CTID=${1:-Testing}
 info "Container ID is: '$CTID'"
@@ -148,7 +114,6 @@ export LXC_BASE=/var/lib/lxc
 export CT_BASE="${LXC_BASE}/${CTID}"
 export LXC_ROOTFS_MOUNT="${CT_BASE}/rootfs/"
 
-##### Temp DISABLED
 info "Patch container config to enable nesting..."
 sed -i 's/^#lxc.include/lxc.include/' "${CT_BASE}/config"
 
@@ -161,18 +126,6 @@ if [[ ! -z ${DEBUG+x} ]]; then
   info "Updated config content:"
   cat ${CT_BASE}/config || EXIT=1 LINE=$LINENO error_exit
 fi
-
-
-# # Load modules for Docker before starting LXC
-# cat << 'EOF' >> $LXC_CONFIG
-# lxc.hook.pre-start: sh -ec 'for module in aufs overlay; do modinfo $module; $(lsmod | grep -Fq $module) || modprobe $module; done;'
-# EOF
-
-
-# # Set container timezone to match host
-# cat << 'EOF' >> $LXC_CONFIG
-# lxc.hook.mount: sh -c 'ln -fs $(readlink /etc/localtime) ${LXC_ROOTFS_MOUNT}/etc/localtime'
-# EOF
 
 # Setup container for Home Assistant
 info "Starting LXC container..."
@@ -198,7 +151,7 @@ lxc-cmd apt-get -qqy upgrade &>/dev/null
 # Install prerequisites
 info "Installing prerequisites..."
 lxc-cmd apt-get -qqy install \
-    wget kmod avahi-daemon curl jq network-manager xterm &>/dev/null
+    wget kmod avahi-daemon curl jq network-manager xterm less &>/dev/null
 
 # Install Docker
 info "Installing Docker..."
@@ -212,16 +165,17 @@ lxc-cmd mkdir -p $(dirname $DOCKER_CONFIG_PATH)
 lxc-cmd wget -qLO $DOCKER_CONFIG_PATH ${HA_URL_BASE}/docker_daemon.json
 lxc-cmd systemctl restart docker
 
-echo "*********************** Early exit ***********************"
-exit 0
-
 # Configure NetworkManager
 info "Configuring NetworkManager..."
 NETWORKMANAGER_CONFIG_PATH='/etc/NetworkManager/NetworkManager.conf'
+if [[ -f $NETWORKMANAGER_CONFIG_PATH ]]; then
+	mv $NETWORKMANAGER_CONFIG_PATH "$NETWORKMANAGER_CONFIG_PATH.bak" || info "Can't backup $NETWORKMANAGER_CONFIG_PATH. File does not exist."
+fi
 lxc-cmd wget -qLO $NETWORKMANAGER_CONFIG_PATH ${HA_URL_BASE}/NetworkManager.conf
 lxc-cmd sed -i 's/type\:veth/interface-name\:veth\*/' $NETWORKMANAGER_CONFIG_PATH
 lxc-cmd dhclient -r &> /dev/null
 lxc-cmd systemctl restart NetworkManager
+lxc-cmd nm-online -s -q
 lxc-cmd nm-online -q
 
 # Create Home Assistant config
@@ -261,7 +215,8 @@ lxc-cmd systemctl enable hassio-supervisor.service > /dev/null 2>&1
 
 # Create service to fix Home Assistant boot time check
 info "Creating service to fix boot time check..."
-pct push $CTID hassio-fix-btime.service /etc/systemd/system/hassio-fix-btime.service
+#pct push $CTID hassio-fix-btime.service /etc/systemd/system/hassio-fix-btime.service
+cat ./hassio-fix-btime.service | lxc-cmd /bin/sh -c "/bin/cat > /etc/systemd/system/hassio-fix-btime.service"
 lxc-cmd mkdir -p ${HASSIO_SUPERVISOR_SERVICE}.wants
 lxc-cmd ln -s /etc/systemd/system/{hassio-fix-btime.service,hassio-supervisor.service.wants/}
 
@@ -273,6 +228,7 @@ lxc-cmd systemctl start hassio-supervisor.service
 info "Installing the 'ha' cli..."
 lxc-cmd wget -qLO /usr/bin/ha ${HA_URL_BASE}/ha
 lxc-cmd chmod a+x /usr/bin/ha
+
 
 # Setup 'ha' cli prompt
 info "Configuring 'ha' cli prompt..."
@@ -289,10 +245,9 @@ info "Cleanup..."
 lxc-cmd apt-get autoremove >/dev/null
 lxc-cmd apt-get autoclean >/dev/null
 lxc-cmd rm -rf /var/{cache,log}/* /var/lib/apt/lists/*
-### Finish LXC commands ###
 
 # Get network details and show completion message
-IP=$(pct exec $CTID ip a s dev eth0 | sed -n '/inet / s/\// /p' | awk '{print $2}')
+IP=$(lxc-cmd ip a s dev eth0 | sed -n '/inet / s/\// /p' | awk '{print $2}')
 info "Successfully created Home Assistant LXC to $CTID."
 msg "
 
