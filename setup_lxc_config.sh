@@ -47,7 +47,7 @@ cat > $LXC_CONFIG <<-"EOF"
 	# The lxc_rootfs_mount is injected when lxc.hook.mount OR lxc.hook.autodev is run!
 	# lxc.environment = LXC_ROOTFS_MOUNT=<LXC_BASE_DIR>/<NAME>/rootfs
 
-	##Issue with apt-get! Must not add this? Think NOT
+	## Issue with apt-get! Must not add this? Think NOT
 	#lxc.arch = x86_64
 	## Or need to copy the /usr/bin/qemu-x86_64 to container (/usr/bin) first? NO
 
@@ -59,11 +59,15 @@ cat > $LXC_CONFIG <<-"EOF"
 
 	## Bellow activated does "KILL" apt-get ie. errors with Permissions etc.
 	## https://github.com/whiskerz007/proxmox_hassio_lxc/blob/fad821e2c3d2d0fb570f844379f03b247ff3b9c7/create_container.sh#L141
-	#lxc.cgroup.devices.allow = a
-	#lxc.cap.drop = 
+	lxc.cgroup.devices.allow = a
+	lxc.cap.drop = 
+
+	## WORKAROUND to fix not working NetworkManager. 
+	## But this does expose the container to ALL users ie. is a security risk!
+	lxc.apparmor.profile = unconfined
 
 	## https://github.com/whiskerz007/proxmox_hassio_lxc/blob/fad821e2c3d2d0fb570f844379f03b247ff3b9c7/create_container.sh#L148
-	# lxc.hook.pre-start = "sh -ec 'for module in aufs overlay; do modinfo $module; $(lsmod | grep -Fq $module) || modprobe $module; done;'"
+	#lxc.hook.pre-start = "sh -ec 'for module in aufs overlay; do modinfo $module; $(lsmod | grep -Fq $module) || modprobe $module; done;'"
 
 	## https://github.com/whiskerz007/proxmox_hassio_lxc/blob/fad821e2c3d2d0fb570f844379f03b247ff3b9c7/create_container.sh#L156
 	lxc.hook.mount = "sh -c 'ln -fs $(readlink /etc/localtime) LXC_ROOTFS/etc/localtime'"
