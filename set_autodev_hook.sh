@@ -67,7 +67,7 @@ done;
 EOF
 HOOK_SCRIPT=${HOOK_SCRIPT//$'\n'/} #Remove newline char from variable
 msg "Created autodev hook with following content:"
-msg ${HOOK_SCRIPT}
+echo ${HOOK_SCRIPT}
 
 # Remove autodev settings
 CTID=${1:-"Testing"}
