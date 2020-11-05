@@ -58,23 +58,28 @@ function cleanup() {
   rm -rf $TEMP_DIR
 }
 
+### Dev-Debug only
 set -x
 
+
+# Replaces download from repo (for the moment)
 TEMP_DIR=$(mktemp -d)
-cp *.sh $TEMP_DIR
-cp hassio-fix-btime.service $TEMP_DIR
+cp *.{sh,service} $TEMP_DIR
 
 pushd $TEMP_DIR >/dev/null
 
-info "Workingdirectory is: $(pwd)"
-info "Content: 
-$(ls -l)"
 
 CTID=${1:-Testing}
 info "Container ID is: '$CTID'"
+source env.sh $CTID
+
 
 OSTYPE=debian
 OSVERSION=buster
+
+info "Workingdirectory is: $(pwd)"
+msg "Content: 
+$(ls -l)"
 
 info "Setup target container config..."
 bash ./setup_lxc_config.sh $CTID
@@ -113,9 +118,10 @@ fi
 lxc-create ${LXC_OPTIONS[@]} 
 
 
-export LXC_BASE=/var/lib/lxc
-export CT_BASE="${LXC_BASE}/${CTID}"
-export LXC_ROOTFS_MOUNT="${CT_BASE}/rootfs/"
+source env.sh $CTID
+#export LXC_BASE=/var/lib/lxc
+#export CT_BASE="${LXC_BASE}/${CTID}"
+#export LXC_ROOTFS_MOUNT="${CT_BASE}/rootfs/"
 
 info "Patch container config to enable nesting..."
 sed -i 's/^#lxc.include/lxc.include/' "${CT_BASE}/config"
