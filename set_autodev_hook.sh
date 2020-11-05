@@ -51,8 +51,8 @@ done
 
 
 # Store autodev hook script in variable
-read -r -d '' HOOK_SCRIPT <<- "EOF" || true
-echo "Run AutoDev Hook Script with rootfs_mount as: ${LXC_ROOTFS_MOUNT}";
+read -r -d '' HOOK_SCRIPT <<- EOF || true
+echo "Run AutoDev Hook Script with rootfs_mount as: \${LXC_ROOTFS_MOUNT}";
 for char_dev in \$(find /sys/dev/char -regextype sed $CHAR_DEV_STRING); do
   dev="/dev/\$(sed -n "/DEVNAME/ s/^.*=\(.*\)$/\1/p" \${char_dev}/uevent)";
   mkdir -p \$(dirname \${LXC_ROOTFS_MOUNT}\${dev});
