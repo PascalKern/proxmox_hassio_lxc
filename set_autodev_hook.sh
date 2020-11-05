@@ -26,9 +26,11 @@ function cleanup() {
   popd >/dev/null
   rm -rf $TEMP_DIR
 }
+
 TEMP_DIR=$(mktemp -d)
 cp env.sh $TEMP_DIR/
 pushd $TEMP_DIR >/dev/null
+msg "Changed working directory to: $(pwd)"
 
 # Array of device types to enable in container
 #CHAR_DEVS+=(major:minor)
@@ -64,6 +66,8 @@ for char_dev in \$(find /sys/dev/char -regextype sed $CHAR_DEV_STRING); do
 done;
 EOF
 HOOK_SCRIPT=${HOOK_SCRIPT//$'\n'/} #Remove newline char from variable
+msg "Created autodev hook with following content:"
+msg ${HOOK_SCRIPT}
 
 # Remove autodev settings
 CTID=${1:-"Testing"}
@@ -78,3 +82,4 @@ lxc.autodev = 1
 lxc.hook.autodev = bash -c '$HOOK_SCRIPT'
 
 EOF
+msg "Inserted autodev configuration into container config ($CTID_CONFIG_PATH)"
