@@ -57,6 +57,9 @@ function cleanup() {
   popd >/dev/null
   rm -rf $TEMP_DIR
 }
+
+set -x
+
 TEMP_DIR=$(mktemp -d)
 cp *.sh $TEMP_DIR
 cp hassio-fix-btime.service $TEMP_DIR
@@ -119,8 +122,10 @@ sed -i 's/^#lxc.include/lxc.include/' "${CT_BASE}/config"
 
 # Set autodev hook to enable access to devices in container
 ##### Temp DISABLED
-#info "Setting up the autodev hook script..."
-#bash ./set_autodev_hook.sh $CTID
+info "Setting up the autodev hook script..."
+bash ./set_autodev_hook.sh $CTID
+
+
 
 if [[ ! -z ${DEBUG+x} ]]; then
   info "Updated config content:"
@@ -173,6 +178,10 @@ if [[ -f $NETWORKMANAGER_CONFIG_PATH ]]; then
 fi
 lxc-cmd wget -qLO $NETWORKMANAGER_CONFIG_PATH ${HA_URL_BASE}/NetworkManager.conf
 lxc-cmd sed -i 's/type\:veth/interface-name\:veth\*/' $NETWORKMANAGER_CONFIG_PATH
+lxc-cmd echo "
+[ifupdown]
+managed=true
+" >> $NETWORKMANAGER_CONFIG_PATH
 lxc-cmd dhclient -r &> /dev/null
 lxc-cmd systemctl restart NetworkManager
 lxc-cmd nm-online -s -q
