@@ -59,7 +59,7 @@ function cleanup() {
 }
 
 ### Dev-Debug only
-set -x
+# set -x
 
 
 # Replaces download from repo (for the moment)
@@ -256,7 +256,7 @@ lxc-cmd usermod --shell $HA_CLI_PATH root
 lxc-cmd bash -c "echo -e '\ncd $HASSIO_DATA_PATH' >> /root/.bashrc"
 
 # Cleanup container
-info "Cleanup..."
+info "Cleanup... (if stuck here try hit enter once...)"
 lxc-cmd apt-get autoremove >/dev/null
 lxc-cmd apt-get autoclean >/dev/null
 lxc-cmd rm -rf /var/{cache,log}/* /var/lib/apt/lists/*
