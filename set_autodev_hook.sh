@@ -27,6 +27,7 @@ function cleanup() {
   rm -rf $TEMP_DIR
 }
 TEMP_DIR=$(mktemp -d)
+cp env.sh $TEMP_DIR/
 pushd $TEMP_DIR >/dev/null
 
 # Array of device types to enable in container
@@ -48,9 +49,10 @@ for char_dev in ${CHAR_DEVS[@]}; do
   CHAR_DEV_STRING+=" -regex \".*/${char_dev}\""
 done
 
+
 # Store autodev hook script in variable
 read -r -d '' HOOK_SCRIPT <<- "EOF" || true
-echo "Run AutoDev Hook Script with rootfs_mount as: ${LXC_ROOTFS_MOUNT}"
+echo "Run AutoDev Hook Script with rootfs_mount as: ${LXC_ROOTFS_MOUNT}";
 for char_dev in \$(find /sys/dev/char -regextype sed $CHAR_DEV_STRING); do
   dev="/dev/\$(sed -n "/DEVNAME/ s/^.*=\(.*\)$/\1/p" \${char_dev}/uevent)";
   mkdir -p \$(dirname \${LXC_ROOTFS_MOUNT}\${dev});
@@ -65,6 +67,7 @@ HOOK_SCRIPT=${HOOK_SCRIPT//$'\n'/} #Remove newline char from variable
 
 # Remove autodev settings
 CTID=${1:-"Testing"}
+source env.sh $CTID
 CTID_CONFIG_PATH=${LXC_BASE}/${CTID}/config
 sed '/autodev/d' $CTID_CONFIG_PATH >CTID.conf
 cat CTID.conf >$CTID_CONFIG_PATH
